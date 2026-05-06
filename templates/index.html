@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}BugBoard - Simple Issue Tracking{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Issue tracking for small teams</p>
+      <h1>Keep bugs, tasks, and fixes moving.</h1>
+      <p>BugBoard gives you a clean workspace for projects, priorities, statuses, and the everyday work of shipping software.</p>
+      <div class="hero-actions">
+        <a class="primary-button" href="{{ url_for('register') }}">Create your board</a>
+        <a class="secondary-button" href="{{ url_for('login') }}">Log in</a>
+      </div>
+    </div>
+    <div class="preview-panel" aria-label="BugBoard preview">
+      <div class="preview-header">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="preview-row high">
+        <strong>Payment button fails on mobile</strong>
+        <span>High</span>
+      </div>
+      <div class="preview-row medium">
+        <strong>Add empty state to dashboard</strong>
+        <span>Medium</span>
+      </div>
+      <div class="preview-row low">
+        <strong>Polish project settings copy</strong>
+        <span>Low</span>
+      </div>
+    </div>
+  </section>
+{% endblock %}

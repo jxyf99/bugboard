@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Log In - BugBoard{% endblock %}
+
+{% block content %}
+  <section class="auth-shell">
+    <form class="auth-card" method="post">
+      <p class="eyebrow">Welcome back</p>
+      <h1>Log in</h1>
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" value="{{ email or '' }}" autocomplete="email" required>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <button class="primary-button full-width" type="submit">Log in</button>
+      <p class="form-note">New here? <a href="{{ url_for('register') }}">Create an account</a>.</p>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - BugBoard{% endblock %}
+
+{% block content %}
+  <section class="page-shell">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Dashboard</p>
+        <h1>Good to see you, {{ g.user.name }}.</h1>
+      </div>
+    </div>
+
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span>Total</span>
+        <strong>{{ counts.total }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Open</span>
+        <strong>{{ counts.open }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>In Progress</span>
+        <strong>{{ counts.progress }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Done</span>
+        <strong>{{ counts.done }}</strong>
+      </article>
+    </section>
+
+    <section class="workspace-grid">
+      <aside class="panel">
+        <h2>New project</h2>
+        <form method="post" action="{{ url_for('create_project') }}">
+          <label for="name">Project name</label>
+          <input id="name" name="name" placeholder="Website redesign" required>
+
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="4" placeholder="What is this project about?"></textarea>
+
+          <button class="primary-button full-width" type="submit">Create project</button>
+        </form>
+
+        <h2 class="section-gap">Projects</h2>
+        <div class="project-list">
+          {% for project in projects %}
+            <a class="project-card" href="{{ url_for('project_detail', project_id=project.id) }}">
+              <strong>{{ project.name }}</strong>
+              <span>{{ project.issue_count }} issues</span>
+            </a>
+          {% else %}
+            <p class="empty-copy">Create your first project to start adding issues.</p>
+          {% endfor %}
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>Issues</h2>
+        </div>
+
+        <form class="filters" method="get" action="{{ url_for('dashboard') }}">
+          <input name="q" value="{{ search }}" placeholder="Search issues">
+          <select name="status">
+            {% for status in ["All", "Open", "In Progress", "Done"] %}
+              <option value="{{ status }}" {% if status == selected_status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+          <select name="priority">
+            {% for priority in ["All", "High", "Medium", "Low"] %}
+              <option value="{{ priority }}" {% if priority == selected_priority %}selected{% endif %}>{{ priority }}</option>
+            {% endfor %}
+          </select>
+          <button class="secondary-button" type="submit">Filter</button>
+        </form>
+
+        <div class="issue-list">
+          {% for issue in issues %}
+            <a class="issue-row" href="{{ url_for('edit_issue', issue_id=issue.id) }}">
+              <div>
+                <strong>{{ issue.title }}</strong>
+                <span>{{ issue.project_name }}</span>
+              </div>
+              <div class="issue-meta">
+                <span class="pill status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
+                <span class="pill priority-{{ issue.priority|lower }}">{{ issue.priority }}</span>
+              </div>
+            </a>
+          {% else %}
+            <p class="empty-copy">No issues match your current view.</p>
+          {% endfor %}
+        </div>
+      </section>
+    </section>
+  </section>
+{% endblock %}

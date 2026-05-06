@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - BugBoard{% endblock %}
+
+{% block content %}
+  <section class="page-shell">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Project</p>
+        <h1>{{ project.name }}</h1>
+        {% if project.description %}
+          <p>{{ project.description }}</p>
+        {% endif %}
+      </div>
+      <a class="primary-button" href="{{ url_for('create_issue', project_id=project.id) }}">New issue</a>
+    </div>
+
+    <section class="panel">
+      <div class="issue-list">
+        {% for issue in issues %}
+          <article class="issue-row">
+            <div>
+              <strong>{{ issue.title }}</strong>
+              {% if issue.description %}
+                <span>{{ issue.description }}</span>
+              {% endif %}
+            </div>
+            <div class="issue-actions">
+              <span class="pill status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
+              <span class="pill priority-{{ issue.priority|lower }}">{{ issue.priority }}</span>
+              <a class="secondary-button compact" href="{{ url_for('edit_issue', issue_id=issue.id) }}">Edit</a>
+            </div>
+          </article>
+        {% else %}
+          <p class="empty-copy">No issues yet. Create one and start the board.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </section>
+{% endblock %}

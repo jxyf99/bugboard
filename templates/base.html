@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}BugBoard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}">
+        <span class="brand-mark">B</span>
+        <span>BugBoard</span>
+      </a>
+
+      <nav>
+        {% if g.user %}
+          <a href="{{ url_for('dashboard') }}">Dashboard</a>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button class="ghost-button" type="submit">Log out</button>
+          </form>
+        {% else %}
+          <a href="{{ url_for('login') }}">Log in</a>
+          <a class="nav-button" href="{{ url_for('register') }}">Get started</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="flash-stack">
+          {% for category, message in messages %}
+            <p class="flash {{ category }}">{{ message }}</p>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

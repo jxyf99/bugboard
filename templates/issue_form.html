@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}{% if issue %}Edit issue{% else %}New issue{% endif %} - BugBoard{% endblock %}
+
+{% block content %}
+  <section class="auth-shell wide">
+    <form class="auth-card" method="post">
+      <p class="eyebrow">{{ project.name }}</p>
+      <h1>{% if issue %}Edit issue{% else %}New issue{% endif %}</h1>
+
+      <label for="title">Title</label>
+      <input id="title" name="title" value="{{ issue.title if issue else '' }}" placeholder="What needs attention?" required>
+
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="6" placeholder="Add context, steps, or notes.">{{ issue.description if issue else '' }}</textarea>
+
+      <div class="form-grid">
+        <div>
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            {% for status in ["Open", "In Progress", "Done"] %}
+              <option value="{{ status }}" {% if issue and issue.status == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="priority">Priority</label>
+          <select id="priority" name="priority">
+            {% for priority in ["High", "Medium", "Low"] %}
+              <option value="{{ priority }}" {% if (issue and issue.priority == priority) or (not issue and priority == "Medium") %}selected{% endif %}>{{ priority }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="primary-button" type="submit">{% if issue %}Save changes{% else %}Create issue{% endif %}</button>
+        <a class="secondary-button" href="{{ url_for('project_detail', project_id=project.id) }}">Cancel</a>
+      </div>
+    </form>
+
+    {% if issue %}
+      <form class="danger-zone" method="post" action="{{ url_for('delete_issue', issue_id=issue.id) }}">
+        <div>
+          <strong>Delete this issue</strong>
+          <p>This removes the issue from the project.</p>
+        </div>
+        <button class="danger-button" type="submit">Delete</button>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}
