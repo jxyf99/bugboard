@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from functools import wraps
+from urllib.parse import urlparse, urlunparse
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -9,13 +10,31 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 app.config["DATABASE"] = os.path.join(app.instance_path, "bugboard.sqlite")
+app.config["DATABASE_URL"] = os.environ.get("DATABASE_URL", "")
+
+
+def is_postgres():
+    return app.config["DATABASE_URL"].startswith(("postgres://", "postgresql://"))
+
+
+def normalize_database_url(url):
+    if url.startswith("postgres://"):
+        parsed = urlparse(url)
+        return urlunparse(parsed._replace(scheme="postgresql"))
+    return url
 
 
 def get_db():
     if "db" not in g:
-        os.makedirs(app.instance_path, exist_ok=True)
-        g.db = sqlite3.connect(app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
+        if is_postgres():
+            from psycopg.rows import dict_row
+            import psycopg
+
+            g.db = psycopg.connect(normalize_database_url(app.config["DATABASE_URL"]), row_factory=dict_row)
+        else:
+            os.makedirs(app.instance_path, exist_ok=True)
+            g.db = sqlite3.connect(app.config["DATABASE"])
+            g.db.row_factory = sqlite3.Row
     return g.db
 
 
@@ -28,41 +47,84 @@ def close_db(error=None):
 
 def init_db():
     db = get_db()
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+    if is_postgres():
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS issues (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'Open',
+                priority TEXT NOT NULL DEFAULT 'Medium',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ]
+        for statement in statements:
+            db.execute(statement)
+    else:
+        db.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
 
-        CREATE TABLE IF NOT EXISTS projects (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            description TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
 
-        CREATE TABLE IF NOT EXISTS issues (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'Open',
-            priority TEXT NOT NULL DEFAULT 'Medium',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects (id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        """
-    )
+            CREATE TABLE IF NOT EXISTS issues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'Open',
+                priority TEXT NOT NULL DEFAULT 'Medium',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id),
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+            """
+        )
     db.commit()
+
+
+def execute(query, params=()):
+    if is_postgres():
+        query = query.replace("?", "%s").replace("LIKE", "ILIKE")
+    return get_db().execute(query, params)
 
 
 @app.cli.command("init-db")
@@ -77,7 +139,7 @@ def load_logged_in_user():
     g.user = None
 
     if user_id is not None:
-        g.user = get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        g.user = execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
 def login_required(view):
@@ -111,12 +173,19 @@ def register():
 
         try:
             db = get_db()
-            db.execute(
+            execute(
                 "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
                 (name, email, generate_password_hash(password)),
             )
             db.commit()
-        except sqlite3.IntegrityError:
+        except Exception as error:
+            if is_postgres():
+                db.rollback()
+                is_duplicate = getattr(error, "sqlstate", "") == "23505"
+            else:
+                is_duplicate = isinstance(error, sqlite3.IntegrityError)
+            if not is_duplicate:
+                raise
             flash("That email is already registered.", "error")
             return render_template("register.html", name=name, email=email)
 
@@ -131,7 +200,7 @@ def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        user = execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
 
         if user is None or not check_password_hash(user["password_hash"], password):
             flash("Invalid email or password.", "error")
@@ -156,7 +225,7 @@ def logout():
 @login_required
 def dashboard():
     db = get_db()
-    projects = db.execute(
+    projects = execute(
         """
         SELECT
             p.*,
@@ -201,7 +270,7 @@ def create_project():
         return redirect(url_for("dashboard"))
 
     db = get_db()
-    db.execute(
+    execute(
         "INSERT INTO projects (user_id, name, description) VALUES (?, ?, ?)",
         (g.user["id"], name, description),
     )
@@ -214,7 +283,7 @@ def create_project():
 @login_required
 def project_detail(project_id):
     project = get_project(project_id)
-    issues = get_db().execute(
+    issues = execute(
         """
         SELECT * FROM issues
         WHERE project_id = ? AND user_id = ?
@@ -243,7 +312,7 @@ def create_issue(project_id):
             return render_template("issue_form.html", project=project, issue=None)
 
         db = get_db()
-        db.execute(
+        execute(
             """
             INSERT INTO issues (project_id, user_id, title, description, status, priority)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -274,7 +343,7 @@ def edit_issue(issue_id):
             return render_template("issue_form.html", project=project, issue=issue)
 
         db = get_db()
-        db.execute(
+        execute(
             """
             UPDATE issues
             SET title = ?, description = ?, status = ?, priority = ?, updated_at = CURRENT_TIMESTAMP
@@ -294,14 +363,14 @@ def edit_issue(issue_id):
 def delete_issue(issue_id):
     issue = get_issue(issue_id)
     db = get_db()
-    db.execute("DELETE FROM issues WHERE id = ? AND user_id = ?", (issue["id"], g.user["id"]))
+    execute("DELETE FROM issues WHERE id = ? AND user_id = ?", (issue["id"], g.user["id"]))
     db.commit()
     flash("Issue deleted.", "success")
     return redirect(url_for("project_detail", project_id=issue["project_id"]))
 
 
 def get_project(project_id):
-    project = get_db().execute(
+    project = execute(
         "SELECT * FROM projects WHERE id = ? AND user_id = ?",
         (project_id, g.user["id"]),
     ).fetchone()
@@ -311,7 +380,7 @@ def get_project(project_id):
 
 
 def get_issue(issue_id):
-    issue = get_db().execute(
+    issue = execute(
         "SELECT * FROM issues WHERE id = ? AND user_id = ?",
         (issue_id, g.user["id"]),
     ).fetchone()
@@ -353,11 +422,11 @@ def fetch_issues(status="All", priority="All", search=""):
         """
     )
 
-    return get_db().execute(" ".join(query), params).fetchall()
+    return execute(" ".join(query), params).fetchall()
 
 
 def issue_counts():
-    row = get_db().execute(
+    row = execute(
         """
         SELECT
             COUNT(*) AS total,

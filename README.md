@@ -62,4 +62,11 @@ For a simple Render deployment, use:
 gunicorn app:app
 ```
 
-Set a `SECRET_KEY` environment variable in Render before using it beyond local testing.
+Set these environment variables in Render:
+
+```text
+SECRET_KEY=use-a-long-random-value
+DATABASE_URL=your-render-postgres-internal-database-url
+```
+
+BugBoard uses SQLite locally. If `DATABASE_URL` is present, it connects to Postgres instead.
