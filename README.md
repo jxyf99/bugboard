@@ -2,6 +2,8 @@
 
 BugBoard is a simple Flask issue tracker SaaS MVP. It supports user accounts, projects, issue creation, priorities, statuses, search, and filters.
 
+Live demo: https://bugboard-no3e.onrender.com
+
 ## Features
 
 - Register and log in
