@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}BugBoard{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=2">
   </head>
   <body>
     <header class="topbar">
@@ -17,7 +17,7 @@
         {% if g.user %}
           <a href="{{ url_for('dashboard') }}">Dashboard</a>
           <form method="post" action="{{ url_for('logout') }}">
-            <button class="ghost-button" type="submit">Log out</button>
+            <button class="ghost-button" type="submit">Sign out</button>
           </form>
         {% else %}
           <a href="{{ url_for('login') }}">Log in</a>

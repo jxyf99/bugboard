@@ -4,10 +4,15 @@
 
 {% block content %}
   <section class="page-shell">
-    <div class="page-heading">
+    <div class="page-heading dashboard-heading">
       <div>
         <p class="eyebrow">Dashboard</p>
         <h1>Good to see you, {{ g.user.name }}.</h1>
+        <p>Review active work, open project boards, and keep issue flow moving.</p>
+      </div>
+      <div class="heading-chip">
+        <span>{{ counts.open }}</span>
+        <strong>open issues</strong>
       </div>
     </div>
 
@@ -31,8 +36,13 @@
     </section>
 
     <section class="workspace-grid">
-      <aside class="panel">
-        <h2>New project</h2>
+      <aside class="panel sidebar-panel">
+        <div class="section-title">
+          <div>
+            <p class="panel-kicker">Workspace</p>
+            <h2>New project</h2>
+          </div>
+        </div>
         <form method="post" action="{{ url_for('create_project') }}">
           <label for="name">Project name</label>
           <input id="name" name="name" placeholder="Website redesign" required>
@@ -43,7 +53,12 @@
           <button class="primary-button full-width" type="submit">Create project</button>
         </form>
 
-        <h2 class="section-gap">Projects</h2>
+        <div class="section-title section-gap">
+          <div>
+            <p class="panel-kicker">Boards</p>
+            <h2>Projects</h2>
+          </div>
+        </div>
         <div class="project-list">
           {% for project in projects %}
             <a class="project-card" href="{{ url_for('project_detail', project_id=project.id) }}">
@@ -58,7 +73,10 @@
 
       <section class="panel">
         <div class="section-title">
-          <h2>Issues</h2>
+          <div>
+            <p class="panel-kicker">Queue</p>
+            <h2>Issues</h2>
+          </div>
         </div>
 
         <form class="filters" method="get" action="{{ url_for('dashboard') }}">
