@@ -44,6 +44,7 @@
           </div>
         </div>
         <form method="post" action="{{ url_for('create_project') }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <label for="name">Project name</label>
           <input id="name" name="name" placeholder="Website redesign" required>
 

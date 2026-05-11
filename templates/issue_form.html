@@ -5,6 +5,7 @@
 {% block content %}
   <section class="auth-shell wide">
     <form class="auth-card" method="post">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <p class="eyebrow">{{ project.name }}</p>
       <h1>{% if issue %}Edit issue{% else %}New issue{% endif %}</h1>
 
@@ -41,6 +42,7 @@
 
     {% if issue %}
       <form class="danger-zone" method="post" action="{{ url_for('delete_issue', issue_id=issue.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div>
           <strong>Delete this issue</strong>
           <p>This removes the issue from the project.</p>

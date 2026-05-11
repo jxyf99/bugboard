@@ -72,3 +72,9 @@ DATABASE_URL=your-render-postgres-internal-database-url
 ```
 
 BugBoard uses SQLite locally. If `DATABASE_URL` is present, it connects to Postgres instead.
+
+## Security Notes
+
+- Keep `SECRET_KEY` and `DATABASE_URL` in Render environment variables, never in source files.
+- Use a unique, random `SECRET_KEY` for production so Flask sessions cannot be forged.
+- The app includes CSRF protection for state-changing forms and sends basic browser security headers.

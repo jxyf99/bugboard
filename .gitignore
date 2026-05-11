@@ -2,6 +2,15 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.log
+*.pem
+*.key
+secrets/
+credentials/
 instance/
 server.log
 server.err

@@ -1,5 +1,8 @@
 import os
+import hmac
+import secrets
 import sqlite3
+from datetime import timedelta
 from functools import wraps
 from urllib.parse import urlparse, urlunparse
 
@@ -8,9 +11,20 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or secrets.token_urlsafe(32)
 app.config["DATABASE"] = os.path.join(app.instance_path, "bugboard.sqlite")
 app.config["DATABASE_URL"] = os.environ.get("DATABASE_URL", "")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("RENDER") == "true",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+)
+
+VALID_STATUSES = {"Open", "In Progress", "Done"}
+VALID_PRIORITIES = {"High", "Medium", "Low"}
+MAX_NAME_LENGTH = 120
+MAX_DESCRIPTION_LENGTH = 5000
 
 
 def is_postgres():
@@ -135,11 +149,51 @@ def init_db_command():
 
 @app.before_request
 def load_logged_in_user():
+    if request.method == "POST":
+        validate_csrf_token()
+
     user_id = session.get("user_id")
     g.user = None
 
     if user_id is not None:
         g.user = execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    return response
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": csrf_token}
+
+
+def csrf_token():
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["_csrf_token"] = token
+    return token
+
+
+def validate_csrf_token():
+    expected = session.get("_csrf_token")
+    supplied = request.form.get("_csrf_token", "")
+    if not expected or not hmac.compare_digest(expected, supplied):
+        abort(400)
 
 
 def login_required(view):
@@ -163,7 +217,7 @@ def index():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
+        name = clean_text(request.form.get("name", ""), MAX_NAME_LENGTH)
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
 
@@ -208,6 +262,8 @@ def login():
 
         session.clear()
         session["user_id"] = user["id"]
+        session.permanent = True
+        csrf_token()
         flash("Welcome back.", "success")
         return redirect(url_for("dashboard"))
 
@@ -262,8 +318,8 @@ def dashboard():
 @app.route("/projects", methods=["POST"])
 @login_required
 def create_project():
-    name = request.form.get("name", "").strip()
-    description = request.form.get("description", "").strip()
+    name = clean_text(request.form.get("name", ""), MAX_NAME_LENGTH)
+    description = clean_text(request.form.get("description", ""), MAX_DESCRIPTION_LENGTH)
 
     if not name:
         flash("Project name is required.", "error")
@@ -302,10 +358,10 @@ def create_issue(project_id):
     project = get_project(project_id)
 
     if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        description = request.form.get("description", "").strip()
-        status = request.form.get("status", "Open")
-        priority = request.form.get("priority", "Medium")
+        title = clean_text(request.form.get("title", ""), MAX_NAME_LENGTH)
+        description = clean_text(request.form.get("description", ""), MAX_DESCRIPTION_LENGTH)
+        status = valid_choice(request.form.get("status", "Open"), VALID_STATUSES, "Open")
+        priority = valid_choice(request.form.get("priority", "Medium"), VALID_PRIORITIES, "Medium")
 
         if not title:
             flash("Issue title is required.", "error")
@@ -333,10 +389,10 @@ def edit_issue(issue_id):
     project = get_project(issue["project_id"])
 
     if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        description = request.form.get("description", "").strip()
-        status = request.form.get("status", "Open")
-        priority = request.form.get("priority", "Medium")
+        title = clean_text(request.form.get("title", ""), MAX_NAME_LENGTH)
+        description = clean_text(request.form.get("description", ""), MAX_DESCRIPTION_LENGTH)
+        status = valid_choice(request.form.get("status", "Open"), VALID_STATUSES, "Open")
+        priority = valid_choice(request.form.get("priority", "Medium"), VALID_PRIORITIES, "Medium")
 
         if not title:
             flash("Issue title is required.", "error")
@@ -444,6 +500,14 @@ def issue_counts():
         "progress": row["progress"] or 0,
         "done": row["done"] or 0,
     }
+
+
+def clean_text(value, max_length):
+    return value.strip()[:max_length]
+
+
+def valid_choice(value, allowed, fallback):
+    return value if value in allowed else fallback
 
 
 with app.app_context():
